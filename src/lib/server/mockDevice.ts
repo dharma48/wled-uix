@@ -1,0 +1,331 @@
+/**
+ * In-process fake WLED device used when a device's host is the literal "mock".
+ * Serves realistic /json, /json/fxdata and /presets.json responses and accepts POSTs,
+ * so the whole UI can be developed and verified without physical hardware.
+ *
+ * State is per-process singleton; good enough for a demo device.
+ */
+import type { WledBundle, WledInfo, WledSegment, WledState } from '$lib/wled/types';
+
+/** [effectName, fxdataMetadata] — see fxdata.ts for the metadata format. */
+const EFFECTS: [string, string][] = [
+	['Solid', ';!;;1;'],
+	['Blink', '!,!;!,!;;1;'],
+	['Breathe', '!,;!,!;;1;'],
+	['Wipe', '!,!;!,!;!;1;'],
+	['Colorloop', '!,!;;!;1;sx=128'],
+	['Rainbow', '!,!;;!;1;sx=128'],
+	['Chase', '!,!;!,!,!;!;1;'],
+	['Theater', '!,!;!,!;!;1;'],
+	['Twinkle', '!,!;!,!;!;1;'],
+	['Sparkle', '!,!;!,!;!;1;'],
+	['Fireworks', '!,!;!,!;!;1;'],
+	['Fire 2012', '!,!;;!;1;sx=120,ix=64,pal=35'],
+	['Colortwinkles', '!,!;;!;1;pal=0'],
+	['Plasma', '!,!;;!;1;'],
+	['Noise', '!,!;;!;1;'],
+	['Meteor', '!,!;!,!;!;1;'],
+	['Glitter', '!,!;!,!;!;1;'],
+	['Running Dual', '!,!,,,,Smooth;!,!;!;1;'],
+	['Dissolve', '!,!,Dissolve rate;!,!;;1;'],
+	['Aurora', '!,!;;!;1;pal=50'],
+	['Audio Bands', '!,!;!,!;!;1v;'],
+	['Gravimeter', '!,!;!,!;!;1f;']
+];
+
+const PALETTES: string[] = [
+	'Default',
+	'* Random Cycle',
+	'* Color 1',
+	'* Colors 1&2',
+	'* Color Gradient',
+	'* Colors Only',
+	'Party',
+	'Cloud',
+	'Lava',
+	'Ocean',
+	'Forest',
+	'Rainbow',
+	'Rainbow Bands',
+	'Sunset',
+	'Rivendell',
+	'Breeze',
+	'Red & Blue',
+	'Yellowout',
+	'Analogous',
+	'Splash',
+	'Pastel',
+	'Sunset 2',
+	'Beach',
+	'Vintage',
+	'Departure',
+	'Landscape',
+	'Fire',
+	'Icefire',
+	'Autumn',
+	'Magenta',
+	'April Night',
+	'C9',
+	'Sakura',
+	'Aurora'
+];
+
+/** id -> preset (WLED /presets.json shape; 0 is reserved/empty). */
+interface MockPreset {
+	n: string;
+	state: Partial<WledState>;
+}
+const PRESETS: Record<string, MockPreset> = {
+	'1': {
+		n: 'Warm White',
+		state: {
+			on: true,
+			bri: 200,
+			seg: [{ id: 0, fx: 0, col: [[255, 170, 80]], pal: 0 } as WledSegment]
+		}
+	},
+	'2': {
+		n: 'Christmas',
+		state: {
+			on: true,
+			bri: 220,
+			seg: [{ id: 0, fx: 6, col: [[255, 0, 0], [0, 255, 0], [255, 255, 255]], pal: 0 } as WledSegment]
+		}
+	},
+	'3': {
+		n: 'Halloween',
+		state: {
+			on: true,
+			bri: 180,
+			seg: [{ id: 0, fx: 11, col: [[255, 80, 0]], pal: 8 } as WledSegment]
+		}
+	},
+	'4': {
+		n: 'Ocean Calm',
+		state: {
+			on: true,
+			bri: 160,
+			seg: [{ id: 0, fx: 13, col: [[0, 60, 180]], pal: 9 } as WledSegment]
+		}
+	}
+};
+
+const LED_COUNT = 120;
+
+function initialState(): WledState {
+	return {
+		on: true,
+		bri: 200,
+		transition: 7,
+		ps: -1,
+		pl: -1,
+		mainseg: 0,
+		seg: [
+			{
+				id: 0,
+				start: 0,
+				stop: 40,
+				len: 40,
+				col: [
+					[255, 80, 10],
+					[0, 0, 0],
+					[0, 0, 0]
+				],
+				fx: 11,
+				sx: 120,
+				ix: 90,
+				pal: 8,
+				sel: true,
+				on: true,
+				bri: 255
+			},
+			{
+				id: 1,
+				start: 40,
+				stop: 80,
+				len: 40,
+				col: [
+					[10, 120, 255],
+					[0, 0, 0],
+					[0, 0, 0]
+				],
+				fx: 4,
+				sx: 128,
+				ix: 128,
+				pal: 9,
+				sel: false,
+				on: true,
+				bri: 255
+			},
+			{
+				id: 2,
+				start: 80,
+				stop: 120,
+				len: 40,
+				col: [
+					[120, 20, 200],
+					[0, 0, 0],
+					[0, 0, 0]
+				],
+				fx: 0,
+				sx: 128,
+				ix: 128,
+				pal: 0,
+				sel: false,
+				on: true,
+				bri: 255
+			}
+		]
+	};
+}
+
+const info: WledInfo = {
+	ver: '0.15.0-mock',
+	name: 'Demo strip (mock)',
+	leds: { count: LED_COUNT, lc: 0x01, rgbw: false, maxseg: 16 },
+	fxcount: EFFECTS.length,
+	palcount: PALETTES.length,
+	ws: 1,
+	uptime: 4242,
+	mac: 'de:ad:be:ef:00:01',
+	ip: '127.0.0.1'
+};
+
+// Anchor mutable state on globalThis so the HTTP proxy (SSR module graph) and the WS
+// proxy (dev Vite-config context / prod custom server) share ONE instance in-process.
+const g = globalThis as unknown as { __wledMockState?: WledState };
+if (!g.__wledMockState) g.__wledMockState = initialState();
+const state: WledState = g.__wledMockState;
+
+const clamp = (n: number, lo = 0, hi = 255) => Math.max(lo, Math.min(hi, Math.round(n)));
+
+/** Resolve WLED's `"t"` toggle and `~` relative syntaxes for a numeric field. */
+function resolveNumeric(current: number, value: unknown, lo = 0, hi = 255): number {
+	if (typeof value === 'number') return clamp(value, lo, hi);
+	if (typeof value === 'string') {
+		if (value === 'r') return clamp(Math.floor(Math.random() * (hi - lo + 1)) + lo, lo, hi);
+		if (value.startsWith('~')) {
+			const delta = Number(value.slice(1) || '1');
+			if (!Number.isNaN(delta)) return clamp(current + delta, lo, hi);
+		}
+		const n = Number(value);
+		if (!Number.isNaN(n)) return clamp(n, lo, hi);
+	}
+	return current;
+}
+
+function applySegmentPatch(target: WledSegment, patch: Record<string, unknown>) {
+	if ('col' in patch && Array.isArray(patch.col)) target.col = patch.col as WledSegment['col'];
+	if ('fx' in patch) target.fx = resolveNumeric(target.fx, patch.fx, 0, EFFECTS.length - 1);
+	if ('sx' in patch) target.sx = resolveNumeric(target.sx, patch.sx);
+	if ('ix' in patch) target.ix = resolveNumeric(target.ix, patch.ix);
+	if ('pal' in patch) target.pal = resolveNumeric(target.pal, patch.pal, 0, PALETTES.length - 1);
+	for (const k of ['c1', 'c2', 'c3'] as const) {
+		if (k in patch) target[k] = resolveNumeric(target[k] ?? 0, patch[k]);
+	}
+	for (const k of ['o1', 'o2', 'o3'] as const) {
+		if (k in patch) target[k] = Boolean(patch[k]);
+	}
+	if ('on' in patch) target.on = patch.on === 't' ? !target.on : Boolean(patch.on);
+	if ('bri' in patch) target.bri = resolveNumeric(target.bri ?? 255, patch.bri);
+	if ('rev' in patch) target.rev = Boolean(patch.rev);
+	if ('mi' in patch) target.mi = Boolean(patch.mi);
+	if ('cct' in patch) target.cct = resolveNumeric(target.cct ?? 127, patch.cct, 0, 255);
+	if ('sel' in patch) target.sel = Boolean(patch.sel);
+}
+
+function mergeState(body: Record<string, unknown>) {
+	// Preset application first (it replaces relevant fields).
+	if ('ps' in body) {
+		const id = String(body.ps);
+		const preset = PRESETS[id];
+		if (preset) {
+			applyPresetState(preset.state);
+			state.ps = Number(id);
+		}
+	}
+	if ('on' in body) state.on = body.on === 't' ? !state.on : Boolean(body.on);
+	if ('bri' in body) state.bri = resolveNumeric(state.bri, body.bri);
+	if ('transition' in body)
+		state.transition = resolveNumeric(state.transition ?? 7, body.transition, 0, 65535);
+	if ('mainseg' in body) state.mainseg = Number(body.mainseg);
+
+	if ('seg' in body && Array.isArray(body.seg)) {
+		for (const rawSeg of body.seg as Record<string, unknown>[]) {
+			const id = typeof rawSeg.id === 'number' ? rawSeg.id : state.mainseg ?? 0;
+			const target = state.seg.find((s) => s.id === id);
+			if (target) {
+				// A manual segment edit clears the "active preset" indicator.
+				if (!('ps' in body)) state.ps = -1;
+				applySegmentPatch(target, rawSeg);
+			}
+		}
+	}
+}
+
+function applyPresetState(ps: Partial<WledState>) {
+	if (ps.on !== undefined) state.on = ps.on;
+	if (ps.bri !== undefined) state.bri = ps.bri;
+	if (ps.seg) {
+		for (const segPatch of ps.seg) {
+			const target = state.seg.find((s) => s.id === segPatch.id);
+			if (target) applySegmentPatch(target, segPatch as unknown as Record<string, unknown>);
+		}
+	}
+}
+
+function bundle(): WledBundle {
+	return {
+		state,
+		info,
+		effects: EFFECTS.map((e) => e[0]),
+		palettes: PALETTES
+	};
+}
+
+export interface MockResponse {
+	status: number;
+	body: unknown;
+}
+
+/** Handle a request against the mock's /json/* surface. `subpath` excludes "/json". */
+export function mockJson(
+	method: string,
+	subpath: string,
+	body?: Record<string, unknown>
+): MockResponse {
+	const path = subpath.replace(/^\/+/, '');
+	if (method === 'POST') {
+		if (body) mergeState(body);
+		// WLED returns the state when v:true, else {success:true}.
+		return { status: 200, body: body?.v ? state : { success: true } };
+	}
+	switch (path) {
+		case '':
+			return { status: 200, body: bundle() };
+		case 'state':
+			return { status: 200, body: state };
+		case 'info':
+			return { status: 200, body: info };
+		case 'eff':
+			return { status: 200, body: EFFECTS.map((e) => e[0]) };
+		case 'pal':
+			return { status: 200, body: PALETTES };
+		case 'fxdata':
+			return { status: 200, body: EFFECTS.map((e) => e[1]) };
+		default:
+			return { status: 404, body: { error: 'not found' } };
+	}
+}
+
+/** Handle GET /presets.json for the mock. */
+export function mockPresets(): MockResponse {
+	const out: Record<string, unknown> = { '0': {} };
+	for (const [id, p] of Object.entries(PRESETS)) out[id] = { n: p.n };
+	return { status: 200, body: out };
+}
+
+/** Current state snapshot (used by the WS proxy's mock branch). */
+export function mockStateSnapshot(): WledState {
+	return state;
+}

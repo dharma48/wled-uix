@@ -1,0 +1,17 @@
+services:
+  wled-uix:
+    build: .
+    image: wled-uix
+    container_name: wled-uix
+    restart: unless-stopped
+    # Host networking lets the app do mDNS (_wled._tcp) discovery on your LAN.
+    # If you don't need auto-discovery, remove `network_mode` and use the `ports`
+    # mapping below instead.
+    network_mode: host
+    environment:
+      - PORT=3000
+      - DATA_DIR=/data
+    volumes:
+      - ./data:/data
+    # ports:
+    #   - "3000:3000"

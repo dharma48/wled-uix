@@ -20,7 +20,8 @@
 
 	const nav = [
 		{ href: '/', label: 'Control' },
-		{ href: '/designer', label: 'Designer' }
+		{ href: '/designer', label: 'Designer' },
+		{ href: '/scenes', label: 'Scenes' }
 	];
 
 	function applyTheme(t: 'dark' | 'light') {

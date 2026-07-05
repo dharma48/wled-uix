@@ -13,6 +13,7 @@ import { parseFxDataArray, type EffectMeta } from '$lib/wled/fxdata';
 import { isLiveFrameText, parseLiveBinary, parseLiveFrame, type LiveFrame } from '$lib/wled/live';
 import { throttle } from '$lib/wled/throttle';
 import type { WledBundle, WledColor, WledSegment, WledState } from '$lib/wled/types';
+import type { SceneState } from '$lib/scenes/types';
 
 const WRITE_COALESCE_MS = 60;
 
@@ -254,6 +255,50 @@ export class DeviceController {
 
 	applyPreset(ps: number) {
 		this.client.applyPreset(ps).catch((e) => (this.error = (e as Error).message));
+	}
+
+	// ---- scenes --------------------------------------------------------------------
+
+	/** Snapshot the current look for saving as a scene. */
+	captureState(): SceneState {
+		const s = this.state;
+		if (!s) return { on: false, bri: 0, seg: [] };
+		return {
+			on: s.on,
+			bri: s.bri,
+			seg: this.segments.map((seg) => structuredClone($state.snapshot(seg)) as WledSegment)
+		};
+	}
+
+	/** Apply a saved scene: restore its segments and clear any others on the device. */
+	applyScene(scene: SceneState) {
+		const sceneIds = new Set(scene.seg.map((s) => s.id));
+		const payload: Record<string, unknown>[] = scene.seg.map((s) => ({ ...s }));
+		// Clear every other segment slot so the applied layout is exact, regardless of the
+		// device's current segments (and independent of local-state freshness). Posting
+		// stop:0 to an already-empty slot is a harmless no-op on WLED.
+		for (let id = 0; id < this.maxSeg; id++) {
+			if (!sceneIds.has(id)) payload.push({ id, stop: 0 });
+		}
+		// Optimistic local update; the WS push reconciles to the device's truth.
+		if (this.bundle) {
+			this.bundle.state = {
+				...this.bundle.state,
+				on: scene.on,
+				bri: scene.bri,
+				seg: scene.seg.map((s) => ({ ...s }))
+			};
+		}
+		this.client
+			.applyState({ on: scene.on, bri: scene.bri, seg: payload as unknown as WledSegment[] })
+			.catch((e) => (this.error = (e as Error).message));
+	}
+
+	savePreset(slot: number, name: string) {
+		return this.client.savePreset(slot, name);
+	}
+	deletePreset(slot: number) {
+		return this.client.deletePreset(slot);
 	}
 
 	// ---- segment geometry (designer) -----------------------------------------------

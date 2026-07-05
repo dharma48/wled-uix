@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { removeScenesForDevice } from './sceneStore';
 
 export interface Device {
 	id: string;
@@ -97,5 +98,6 @@ export function removeDevice(id: string): boolean {
 	if (idx === -1) return false;
 	store.devices.splice(idx, 1);
 	persist();
+	removeScenesForDevice(id); // cascade: drop the device's saved scenes
 	return true;
 }

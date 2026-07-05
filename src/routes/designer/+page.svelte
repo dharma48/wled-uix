@@ -1,12 +1,24 @@
 <script lang="ts">
 	import { devices } from '$lib/stores/devices.svelte';
 	import { activeController } from '$lib/stores/activeController.svelte';
+	import { scenes } from '$lib/stores/scenes.svelte';
 	import ConnectionBadge from '$lib/components/ConnectionBadge.svelte';
 	import StripCanvas from '$lib/components/StripCanvas.svelte';
 	import SegmentGeometryBar from '$lib/components/SegmentGeometryBar.svelte';
 	import SegmentEditor from '$lib/components/SegmentEditor.svelte';
 
 	let ctrl = $derived(activeController.controller);
+	let savedMsg = $state(false);
+
+	async function saveAsScene() {
+		const c = ctrl;
+		const id = devices.active?.id;
+		if (!c || !id) return;
+		const name = `Scene ${new Date().toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+		await scenes.create(id, name, c.captureState(), c.ledCount);
+		savedMsg = true;
+		setTimeout(() => (savedMsg = false), 2200);
+	}
 
 	// Start the live peek while the designer is open; stop it on leave / device switch so
 	// the device's single peek slot is freed.
@@ -44,6 +56,9 @@
 					<span class="faint">Drag segment edges to resize, drag the body to move.</span>
 				</div>
 				<div class="head-right">
+					<button class="save-scene" class:saved={savedMsg} onclick={saveAsScene}>
+						{savedMsg ? 'Saved to Scenes ✓' : 'Save as scene'}
+					</button>
 					<button
 						class="peek-toggle"
 						class:on={ctrl.peeking}
@@ -111,6 +126,24 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
+	}
+	.save-scene {
+		padding: 7px 16px;
+		border-radius: 999px;
+		border: 1px solid transparent;
+		background: var(--accent);
+		color: var(--accent-contrast);
+		font-size: 0.82rem;
+		font-weight: 650;
+		transition: all 0.15s var(--ease);
+	}
+	.save-scene:hover {
+		background: var(--accent-hover);
+	}
+	.save-scene.saved {
+		background: color-mix(in srgb, var(--ok) 22%, transparent);
+		border-color: color-mix(in srgb, var(--ok) 55%, transparent);
+		color: var(--ok);
 	}
 	.peek-toggle {
 		display: inline-flex;

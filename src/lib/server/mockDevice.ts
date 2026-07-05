@@ -75,40 +75,35 @@ interface MockPreset {
 	n: string;
 	state: Partial<WledState>;
 }
-const PRESETS: Record<string, MockPreset> = {
-	'1': {
-		n: 'Warm White',
-		state: {
-			on: true,
-			bri: 200,
-			seg: [{ id: 0, fx: 0, col: [[255, 170, 80]], pal: 0 } as WledSegment]
+function seedPresets(): Record<string, MockPreset> {
+	return {
+		'1': {
+			n: 'Warm White',
+			state: { on: true, bri: 200, seg: [{ id: 0, fx: 0, col: [[255, 170, 80]], pal: 0 } as WledSegment] }
+		},
+		'2': {
+			n: 'Christmas',
+			state: {
+				on: true,
+				bri: 220,
+				seg: [{ id: 0, fx: 6, col: [[255, 0, 0], [0, 255, 0], [255, 255, 255]], pal: 0 } as WledSegment]
+			}
+		},
+		'3': {
+			n: 'Halloween',
+			state: { on: true, bri: 180, seg: [{ id: 0, fx: 11, col: [[255, 80, 0]], pal: 8 } as WledSegment] }
+		},
+		'4': {
+			n: 'Ocean Calm',
+			state: { on: true, bri: 160, seg: [{ id: 0, fx: 13, col: [[0, 60, 180]], pal: 9 } as WledSegment] }
 		}
-	},
-	'2': {
-		n: 'Christmas',
-		state: {
-			on: true,
-			bri: 220,
-			seg: [{ id: 0, fx: 6, col: [[255, 0, 0], [0, 255, 0], [255, 255, 255]], pal: 0 } as WledSegment]
-		}
-	},
-	'3': {
-		n: 'Halloween',
-		state: {
-			on: true,
-			bri: 180,
-			seg: [{ id: 0, fx: 11, col: [[255, 80, 0]], pal: 8 } as WledSegment]
-		}
-	},
-	'4': {
-		n: 'Ocean Calm',
-		state: {
-			on: true,
-			bri: 160,
-			seg: [{ id: 0, fx: 13, col: [[0, 60, 180]], pal: 9 } as WledSegment]
-		}
-	}
-};
+	};
+}
+
+// Anchored on globalThis (like state) so psave/pdel persist across module contexts.
+const gpresets = globalThis as unknown as { __wledMockPresets?: Record<string, MockPreset> };
+if (!gpresets.__wledMockPresets) gpresets.__wledMockPresets = seedPresets();
+const PRESETS = gpresets.__wledMockPresets;
 
 const LED_COUNT = 120;
 
@@ -286,6 +281,23 @@ function mergeState(body: Record<string, unknown>) {
 			applySegmentPatch(target, rawSeg);
 		}
 	}
+
+	// Preset save/delete last, so psave captures the fully-applied state (WLED order).
+	if ('psave' in body) {
+		const slot = String(body.psave);
+		const name = typeof body.n === 'string' && body.n.trim() ? body.n : `Preset ${slot}`;
+		PRESETS[slot] = {
+			n: name,
+			state: {
+				on: state.on,
+				bri: state.bri,
+				seg: state.seg
+					.filter((s) => s.stop > s.start)
+					.map((s) => ({ ...s, col: s.col.map((c) => [...c]) as WledSegment['col'] }))
+			}
+		};
+	}
+	if ('pdel' in body) delete PRESETS[String(body.pdel)];
 }
 
 function applyPresetState(ps: Partial<WledState>) {

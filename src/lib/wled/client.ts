@@ -3,7 +3,19 @@
  * `/api/devices/<id>/json/*`, which forwards to the real device — this is what
  * sidesteps WLED's missing CORS headers and HTTP/HTTPS mixed content.
  */
+import type { SceneState } from '$lib/scenes/types';
 import type { WledBundle, WledSegment, WledState } from './types';
+
+/** A state POST body: known WLED state fields plus preset/save control keys. */
+export type WledStateWrite = Partial<WledState> & {
+	psave?: number;
+	pdel?: number;
+	n?: string;
+	ib?: boolean;
+	sb?: boolean;
+	sc?: boolean;
+	v?: boolean;
+};
 
 export class WledClient {
 	constructor(private readonly deviceId: string) {}
@@ -31,7 +43,7 @@ export class WledClient {
 	}
 
 	/** Post a partial state; returns the device's acknowledged state. */
-	async setState(partial: Partial<WledState> & Record<string, unknown>): Promise<WledState> {
+	async setState(partial: WledStateWrite): Promise<WledState> {
 		const res = await fetch(`${this.base()}/state`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -43,7 +55,7 @@ export class WledClient {
 	}
 
 	/** Patch a single segment by id. */
-	setSegment(id: number, patch: Partial<WledSegment> & Record<string, unknown>): Promise<WledState> {
+	setSegment(id: number, patch: Partial<WledSegment>): Promise<WledState> {
 		return this.setState({ seg: [{ id, ...patch }] as unknown as WledSegment[] });
 	}
 
@@ -58,5 +70,20 @@ export class WledClient {
 	/** Apply an existing preset by id. */
 	applyPreset(ps: number): Promise<WledState> {
 		return this.setState({ ps });
+	}
+
+	/** Push a full state (used to apply a saved scene). */
+	applyState(state: SceneState): Promise<WledState> {
+		return this.setState(state);
+	}
+
+	/** Save the current device state into a WLED preset slot with a name. */
+	savePreset(slot: number, name: string): Promise<WledState> {
+		return this.setState({ psave: slot, n: name, ib: true, sb: true });
+	}
+
+	/** Delete a WLED preset slot. */
+	deletePreset(slot: number): Promise<WledState> {
+		return this.setState({ pdel: slot });
 	}
 }

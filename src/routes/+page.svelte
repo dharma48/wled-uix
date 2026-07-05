@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
 	import { devices } from '$lib/stores/devices.svelte';
-	import { DeviceController } from '$lib/stores/device.svelte';
+	import { activeController } from '$lib/stores/activeController.svelte';
 	import PowerToggle from '$lib/components/PowerToggle.svelte';
 	import ConnectionBadge from '$lib/components/ConnectionBadge.svelte';
 	import Slider from '$lib/components/Slider.svelte';
@@ -9,25 +8,7 @@
 	import SegmentEditor from '$lib/components/SegmentEditor.svelte';
 	import PresetBar from '$lib/components/PresetBar.svelte';
 
-	let ctrl = $state<DeviceController | null>(null);
-	let currentId: string | null = null;
-
-	// Rebuild the controller whenever the active device changes.
-	$effect(() => {
-		const id = devices.active?.id ?? null;
-		if (id === currentId) return;
-		currentId = id;
-		ctrl?.destroy();
-		if (id) {
-			const c = new DeviceController(id);
-			ctrl = c;
-			c.init();
-		} else {
-			ctrl = null;
-		}
-	});
-
-	onDestroy(() => ctrl?.destroy());
+	let ctrl = $derived(activeController.controller);
 </script>
 
 <svelte:head><title>WLED UIX</title></svelte:head>

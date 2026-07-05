@@ -215,6 +215,11 @@ function resolveNumeric(current: number, value: unknown, lo = 0, hi = 255): numb
 }
 
 function applySegmentPatch(target: WledSegment, patch: Record<string, unknown>) {
+	// Geometry: start/stop define the LED range (stop exclusive). A segment with
+	// stop <= start is treated as deleted by WLED; we keep len in sync for realism.
+	if ('start' in patch) target.start = resolveNumeric(target.start, patch.start, 0, LED_COUNT);
+	if ('stop' in patch) target.stop = resolveNumeric(target.stop, patch.stop, 0, LED_COUNT);
+	if ('start' in patch || 'stop' in patch) target.len = Math.max(0, target.stop - target.start);
 	if ('col' in patch && Array.isArray(patch.col)) target.col = patch.col as WledSegment['col'];
 	if ('fx' in patch) target.fx = resolveNumeric(target.fx, patch.fx, 0, EFFECTS.length - 1);
 	if ('sx' in patch) target.sx = resolveNumeric(target.sx, patch.sx);
@@ -253,12 +258,32 @@ function mergeState(body: Record<string, unknown>) {
 	if ('seg' in body && Array.isArray(body.seg)) {
 		for (const rawSeg of body.seg as Record<string, unknown>[]) {
 			const id = typeof rawSeg.id === 'number' ? rawSeg.id : state.mainseg ?? 0;
-			const target = state.seg.find((s) => s.id === id);
-			if (target) {
-				// A manual segment edit clears the "active preset" indicator.
-				if (!('ps' in body)) state.ps = -1;
-				applySegmentPatch(target, rawSeg);
+			if (id < 0 || id >= (info.leds.maxseg ?? 16)) continue;
+			let target = state.seg.find((s) => s.id === id);
+			if (!target) {
+				// WLED creates a segment when you POST an id that isn't currently defined.
+				target = {
+					id,
+					start: 0,
+					stop: 0,
+					col: [
+						[255, 255, 255],
+						[0, 0, 0],
+						[0, 0, 0]
+					],
+					fx: 0,
+					sx: 128,
+					ix: 128,
+					pal: 0,
+					on: true,
+					bri: 255
+				};
+				state.seg.push(target);
+				state.seg.sort((a, b) => a.id - b.id);
 			}
+			// A manual segment edit clears the "active preset" indicator.
+			if (!('ps' in body)) state.ps = -1;
+			applySegmentPatch(target, rawSeg);
 		}
 	}
 }
@@ -328,4 +353,36 @@ export function mockPresets(): MockResponse {
 /** Current state snapshot (used by the WS proxy's mock branch). */
 export function mockStateSnapshot(): WledState {
 	return state;
+}
+
+/**
+ * Synthesize a live "peek" frame ({"leds":[...],"n":1}) from the current segment layout so
+ * the designer's live preview works without hardware. Each LED takes its covering segment's
+ * primary color, scaled by brightness with a gentle position/time shimmer so it reads as live.
+ */
+export function mockLiveFrame(): { leds: string[]; n: number } {
+	const count = info.leds.count;
+	const t = Date.now() / 1000;
+	const leds: string[] = [];
+	for (let i = 0; i < count; i++) {
+		let r = 0;
+		let g = 0;
+		let b = 0;
+		if (state.on) {
+			const seg = state.seg.find(
+				(s) => s.on !== false && s.stop > s.start && i >= s.start && i < s.stop
+			);
+			if (seg) {
+				const c = seg.col[0] ?? [0, 0, 0];
+				const speed = 0.5 + (seg.sx / 255) * 3;
+				const shimmer = 0.55 + 0.45 * Math.sin(i * 0.35 - t * speed);
+				const scale = (state.bri / 255) * ((seg.bri ?? 255) / 255) * shimmer;
+				r = c[0] * scale;
+				g = c[1] * scale;
+				b = c[2] * scale;
+			}
+		}
+		leds.push((clamp(r) * 65536 + clamp(g) * 256 + clamp(b)).toString(16).padStart(6, '0'));
+	}
+	return { leds, n: 1 };
 }

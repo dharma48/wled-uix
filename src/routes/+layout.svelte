@@ -1,7 +1,9 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { devices } from '$lib/stores/devices.svelte';
+	import { activeController } from '$lib/stores/activeController.svelte';
 	import DeviceSwitcher from '$lib/components/DeviceSwitcher.svelte';
 
 	let { children } = $props();
@@ -12,6 +14,14 @@
 		const saved = localStorage.getItem('theme') as 'dark' | 'light' | null;
 		if (saved) applyTheme(saved);
 	});
+
+	// Keep the shared device controller in step with the active device, across all routes.
+	$effect(() => activeController.sync());
+
+	const nav = [
+		{ href: '/', label: 'Control' },
+		{ href: '/designer', label: 'Designer' }
+	];
 
 	function applyTheme(t: 'dark' | 'light') {
 		theme = t;
@@ -38,6 +48,21 @@
 			</button>
 		</div>
 	</header>
+
+	<nav class="tabs-nav">
+		<div class="tabs-seg">
+			{#each nav as item (item.href)}
+				<a
+					href={item.href}
+					class="tab-link"
+					class:active={page.url.pathname === item.href}
+					aria-current={page.url.pathname === item.href ? 'page' : undefined}
+				>
+					{item.label}
+				</a>
+			{/each}
+		</div>
+	</nav>
 
 	<main class="content">
 		{@render children()}
@@ -98,6 +123,35 @@
 		border: 1px solid var(--border);
 		background: var(--bg-elev);
 		font-size: 1rem;
+	}
+	.tabs-nav {
+		display: flex;
+		justify-content: center;
+		padding: 12px 18px 0;
+	}
+	.tabs-seg {
+		display: inline-flex;
+		gap: 4px;
+		padding: 4px;
+		background: var(--bg-elev-2);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+	}
+	.tab-link {
+		padding: 8px 22px;
+		border-radius: 999px;
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--text-dim);
+		transition: all 0.14s var(--ease);
+	}
+	.tab-link:hover {
+		color: var(--text);
+	}
+	.tab-link.active {
+		background: var(--surface);
+		color: var(--text);
+		box-shadow: var(--shadow-sm);
 	}
 	.content {
 		flex: 1;

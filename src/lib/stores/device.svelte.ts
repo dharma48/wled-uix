@@ -10,6 +10,7 @@
 import { browser } from '$app/environment';
 import { WledClient } from '$lib/wled/client';
 import { parseFxDataArray, type EffectMeta } from '$lib/wled/fxdata';
+import { isLiveFrame, parseLiveFrame, type LiveFrame } from '$lib/wled/live';
 import { throttle } from '$lib/wled/throttle';
 import type { WledBundle, WledColor, WledSegment, WledState } from '$lib/wled/types';
 
@@ -25,9 +26,14 @@ export class DeviceController {
 	loading = $state(true);
 	error = $state<string | null>(null);
 	selectedSegId = $state(0);
+	/** Latest live-peek frame, or null when peek is off. */
+	liveFrame = $state<LiveFrame | null>(null);
+	peeking = $state(false);
 
 	private ws: WebSocket | null = null;
 	private wsRetry: ReturnType<typeof setTimeout> | null = null;
+	/** Whether the designer wants the live-peek stream (survives WS reconnects). */
+	private wantPeek = false;
 	private destroyed = false;
 	private pending = new Map<number, Record<string, unknown>>();
 	private flushSoon = throttle(() => this.flush(), WRITE_COALESCE_MS);
@@ -69,6 +75,8 @@ export class DeviceController {
 
 	destroy() {
 		this.destroyed = true;
+		this.wantPeek = false;
+		this.peeking = false;
 		if (this.wsRetry) clearTimeout(this.wsRetry);
 		this.ws?.close();
 		this.flushSoon.cancel();
@@ -84,6 +92,7 @@ export class DeviceController {
 		ws.onopen = () => {
 			this.connected = true;
 			ws.send(JSON.stringify({ v: true }));
+			if (this.wantPeek) ws.send(JSON.stringify({ lv: true }));
 		};
 		ws.onmessage = (ev) => this.onWsMessage(ev.data);
 		ws.onclose = () => {
@@ -94,6 +103,12 @@ export class DeviceController {
 	}
 
 	private onWsMessage(data: string) {
+		// Live-peek frames are high-frequency; handle them before the state path.
+		if (isLiveFrame(data)) {
+			const frame = parseLiveFrame(data);
+			if (frame) this.liveFrame = frame;
+			return;
+		}
 		try {
 			const msg = JSON.parse(data);
 			// WLED sends {state, info}; the mock sends a bare state object.
@@ -105,6 +120,27 @@ export class DeviceController {
 		} catch {
 			/* ignore non-JSON frames */
 		}
+	}
+
+	private sendWs(obj: unknown) {
+		if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
+	}
+
+	// ---- live peek -----------------------------------------------------------------
+
+	/** Request the live LED "peek" stream from the device. */
+	startPeek() {
+		this.wantPeek = true;
+		this.peeking = true;
+		this.sendWs({ lv: true });
+	}
+
+	/** Stop the live peek stream. */
+	stopPeek() {
+		this.wantPeek = false;
+		this.peeking = false;
+		this.liveFrame = null;
+		this.sendWs({ lv: false });
 	}
 
 	// ---- writes -------------------------------------------------------------------
@@ -211,5 +247,100 @@ export class DeviceController {
 
 	applyPreset(ps: number) {
 		this.client.applyPreset(ps).catch((e) => (this.error = (e as Error).message));
+	}
+
+	// ---- segment geometry (designer) -----------------------------------------------
+
+	get ledCount(): number {
+		return this.bundle?.info.leds.count ?? 0;
+	}
+	get maxSeg(): number {
+		return this.bundle?.info.leds.maxseg ?? 16;
+	}
+	get canAddSegment(): boolean {
+		return this.segments.length < this.maxSeg;
+	}
+
+	/** Largest uncovered LED range; falls back to splitting the last segment's tail. */
+	private largestGap(): { start: number; stop: number } {
+		const count = this.ledCount;
+		const segs = this.segments.slice().sort((a, b) => a.start - b.start);
+		if (segs.length === 0) return { start: 0, stop: count };
+		let bestStart = 0;
+		let bestLen = 0;
+		let cursor = 0;
+		const consider = (from: number, to: number) => {
+			if (to - from > bestLen) {
+				bestLen = to - from;
+				bestStart = from;
+			}
+		};
+		for (const s of segs) {
+			if (s.start > cursor) consider(cursor, s.start);
+			cursor = Math.max(cursor, s.stop);
+		}
+		if (count > cursor) consider(cursor, count);
+		if (bestLen <= 0) {
+			const last = segs[segs.length - 1];
+			return { start: Math.floor((last.start + last.stop) / 2), stop: last.stop };
+		}
+		return { start: bestStart, stop: bestStart + bestLen };
+	}
+
+	/** Create a new segment in the largest free range. Returns its id, or null if full. */
+	addSegment(): number | null {
+		const state = this.state;
+		if (!state || !this.canAddSegment) return null;
+		const used = new Set(this.segments.map((s) => s.id));
+		let id = 0;
+		while (used.has(id) && id < this.maxSeg) id++;
+		if (id >= this.maxSeg) return null;
+
+		const { start, stop } = this.largestGap();
+		const newSeg: WledSegment = {
+			id,
+			start,
+			stop,
+			col: [
+				[255, 255, 255],
+				[0, 0, 0],
+				[0, 0, 0]
+			],
+			fx: 0,
+			sx: 128,
+			ix: 128,
+			pal: 0,
+			on: true,
+			bri: 255
+		};
+		// Optimistic: add locally, keep the underlying seg array ordered by id.
+		state.seg = [...state.seg.filter((s) => s.id !== id), newSeg].sort((a, b) => a.id - b.id);
+		this.selectedSegId = id;
+		this.queueSeg(id, { start, stop, fx: 0, pal: 0, on: true, col: [[255, 255, 255]] }, true);
+		return id;
+	}
+
+	/** Delete a segment (WLED removes it when stop <= start). */
+	deleteSegment(id: number) {
+		const state = this.state;
+		if (!state) return;
+		state.seg = state.seg.filter((s) => s.id !== id);
+		if (this.selectedSegId === id) this.selectedSegId = this.segments[0]?.id ?? 0;
+		this.queueSeg(id, { stop: 0 }, true);
+	}
+
+	/** Resize/move a segment. Throttled during drag, immediate on release. */
+	resizeSegment(id: number, start: number, stop: number, immediate = false) {
+		const count = this.ledCount;
+		let a = Math.max(0, Math.min(count, Math.round(start)));
+		let b = Math.max(0, Math.min(count, Math.round(stop)));
+		if (b < a) [a, b] = [b, a];
+		if (b === a) b = Math.min(count, a + 1); // keep at least 1 LED so it isn't deleted
+		const seg = this.segments.find((s) => s.id === id);
+		if (seg) {
+			seg.start = a;
+			seg.stop = b;
+		}
+		this.queueSeg(id, { start: a, stop: b }, immediate);
 	}
 }

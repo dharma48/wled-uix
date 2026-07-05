@@ -2,6 +2,8 @@
 	import type { DeviceController } from '$lib/stores/device.svelte';
 	import { scenes } from '$lib/stores/scenes.svelte';
 	import type { Scene } from '$lib/scenes/types';
+	import { buildExport } from '$lib/scenes/portable';
+	import { downloadJson, sanitizeFilename } from '$lib/util/download';
 	import SceneThumbnail from './SceneThumbnail.svelte';
 
 	let {
@@ -32,6 +34,10 @@
 	function togglePreset() {
 		if (scene.presetId != null) scenes.unsyncPreset(scene);
 		else scenes.syncPreset(scene);
+	}
+
+	function exportScene() {
+		downloadJson(`${sanitizeFilename(scene.name)}.wledscene.json`, buildExport([scene]));
 	}
 </script>
 
@@ -66,6 +72,7 @@
 	<div class="actions">
 		<button class="btn btn-primary apply" onclick={apply}>Apply</button>
 		<div class="icons">
+			<button class="icon" title="Export scene" onclick={exportScene}>⤓</button>
 			<button class="icon" title="Duplicate" onclick={() => scenes.duplicate(scene)}>⧉</button>
 			<button
 				class="icon"

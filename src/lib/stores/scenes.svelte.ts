@@ -6,6 +6,7 @@ import { browser } from '$app/environment';
 import { WledClient } from '$lib/wled/client';
 import { nextFreePreset } from '$lib/wled/presets';
 import type { Scene, SceneState } from '$lib/scenes/types';
+import type { PortableScene } from '$lib/scenes/portable';
 
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
@@ -70,6 +71,15 @@ class ScenesStore {
 
 	duplicate(scene: Scene) {
 		return this.create(scene.deviceId, `${scene.name} copy`, scene.state, scene.ledCount);
+	}
+
+	/** Import portable scenes into a device's library. Returns how many were added. */
+	async importMany(deviceId: string, items: PortableScene[]): Promise<number> {
+		let count = 0;
+		for (const it of items) {
+			if (await this.create(deviceId, it.name, it.state, it.ledCount)) count++;
+		}
+		return count;
 	}
 
 	async remove(id: string) {

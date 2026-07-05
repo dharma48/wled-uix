@@ -2,6 +2,8 @@
 	import { devices } from '$lib/stores/devices.svelte';
 	import { activeController } from '$lib/stores/activeController.svelte';
 	import { scenes } from '$lib/stores/scenes.svelte';
+	import { buildExport, parseImport } from '$lib/scenes/portable';
+	import { downloadJson, sanitizeFilename } from '$lib/util/download';
 	import SceneCard from '$lib/components/SceneCard.svelte';
 
 	let ctrl = $derived(activeController.controller);
@@ -9,6 +11,29 @@
 
 	let saving = $state(false);
 	let newName = $state('');
+	let importMsg = $state<string | null>(null);
+	let fileInput = $state<HTMLInputElement>();
+
+	function exportAll() {
+		const name = sanitizeFilename(devices.active?.name ?? 'scenes');
+		downloadJson(`${name}-scenes.json`, buildExport(scenes.list));
+	}
+
+	async function onImportFile(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = ''; // let the same file be re-imported later
+		const id = devices.active?.id;
+		if (!file || !id) return;
+		try {
+			const items = parseImport(await file.text());
+			const n = await scenes.importMany(id, items);
+			importMsg = `Imported ${n} scene${n === 1 ? '' : 's'}`;
+		} catch (err) {
+			importMsg = `Import failed: ${(err as Error).message}`;
+		}
+		setTimeout(() => (importMsg = null), 3500);
+	}
 
 	// Load the active device's scenes whenever it changes.
 	$effect(() => {
@@ -50,18 +75,32 @@
 				<h2>Scenes</h2>
 				<span class="faint">Saved looks for {devices.active?.name}</span>
 			</div>
-			{#if saving}
-				<form class="save-form" onsubmit={doSave}>
-					<!-- svelte-ignore a11y_autofocus -->
-					<input bind:value={newName} placeholder="Scene name" autofocus />
-					<button type="submit" class="btn btn-primary">Save</button>
-					<button type="button" class="btn btn-ghost" onclick={() => (saving = false)}>Cancel</button>
-				</form>
-			{:else}
-				<button class="btn btn-primary" onclick={beginSave}>+ Save current look</button>
-			{/if}
+			<div class="head-actions">
+				<input
+					type="file"
+					accept=".json,application/json"
+					class="visually-hidden"
+					bind:this={fileInput}
+					onchange={onImportFile}
+				/>
+				<button class="btn" onclick={() => fileInput?.click()}>Import</button>
+				<button class="btn" onclick={exportAll} disabled={scenes.list.length === 0}>Export all</button>
+				{#if saving}
+					<form class="save-form" onsubmit={doSave}>
+						<!-- svelte-ignore a11y_autofocus -->
+						<input bind:value={newName} placeholder="Scene name" autofocus />
+						<button type="submit" class="btn btn-primary">Save</button>
+						<button type="button" class="btn btn-ghost" onclick={() => (saving = false)}>Cancel</button>
+					</form>
+				{:else}
+					<button class="btn btn-primary" onclick={beginSave}>+ Save current look</button>
+				{/if}
+			</div>
 		</header>
 
+		{#if importMsg}
+			<p class="info">{importMsg}</p>
+		{/if}
 		{#if scenes.error}
 			<p class="err">{scenes.error}</p>
 		{/if}
@@ -116,6 +155,17 @@
 	}
 	.scenes-head .faint {
 		font-size: 0.82rem;
+	}
+	.head-actions {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+	.info {
+		color: var(--ok);
+		font-size: 0.85rem;
+		margin: 0;
 	}
 	.save-form {
 		display: flex;

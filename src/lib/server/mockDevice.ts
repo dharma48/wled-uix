@@ -356,14 +356,18 @@ export function mockStateSnapshot(): WledState {
 }
 
 /**
- * Synthesize a live "peek" frame ({"leds":[...],"n":1}) from the current segment layout so
- * the designer's live preview works without hardware. Each LED takes its covering segment's
- * primary color, scaled by brightness with a gentle position/time shimmer so it reads as live.
+ * Synthesize a live "peek" frame in WLED's binary format ('L', version 1, then RGB triples)
+ * from the current segment layout, so the designer's live preview works — and exercises the
+ * real binary decode path — without hardware. Each LED takes its covering segment's primary
+ * color, scaled by brightness with a gentle position/time shimmer so it reads as live.
  */
-export function mockLiveFrame(): { leds: string[]; n: number } {
+export function mockLiveFrame(): Buffer {
 	const count = info.leds.count;
 	const t = Date.now() / 1000;
-	const leds: string[] = [];
+	const buf = Buffer.allocUnsafe(2 + count * 3);
+	buf[0] = 0x4c; // 'L'
+	buf[1] = 1; // version 1 (1D)
+	let pos = 2;
 	for (let i = 0; i < count; i++) {
 		let r = 0;
 		let g = 0;
@@ -382,7 +386,9 @@ export function mockLiveFrame(): { leds: string[]; n: number } {
 				b = c[2] * scale;
 			}
 		}
-		leds.push((clamp(r) * 65536 + clamp(g) * 256 + clamp(b)).toString(16).padStart(6, '0'));
+		buf[pos++] = clamp(r);
+		buf[pos++] = clamp(g);
+		buf[pos++] = clamp(b);
 	}
-	return { leds, n: 1 };
+	return buf;
 }

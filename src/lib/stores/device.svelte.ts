@@ -10,7 +10,7 @@
 import { browser } from '$app/environment';
 import { WledClient } from '$lib/wled/client';
 import { parseFxDataArray, type EffectMeta } from '$lib/wled/fxdata';
-import { isLiveFrame, parseLiveFrame, type LiveFrame } from '$lib/wled/live';
+import { isLiveFrameText, parseLiveBinary, parseLiveFrame, type LiveFrame } from '$lib/wled/live';
 import { throttle } from '$lib/wled/throttle';
 import type { WledBundle, WledColor, WledSegment, WledState } from '$lib/wled/types';
 
@@ -88,6 +88,7 @@ export class DeviceController {
 		const proto = location.protocol === 'https:' ? 'wss' : 'ws';
 		const url = `${proto}://${location.host}/api/devices/${encodeURIComponent(this.id)}/ws`;
 		const ws = new WebSocket(url);
+		ws.binaryType = 'arraybuffer'; // binary 'L' peek packets arrive as ArrayBuffer
 		this.ws = ws;
 		ws.onopen = () => {
 			this.connected = true;
@@ -102,9 +103,15 @@ export class DeviceController {
 		ws.onerror = () => ws.close();
 	}
 
-	private onWsMessage(data: string) {
-		// Live-peek frames are high-frequency; handle them before the state path.
-		if (isLiveFrame(data)) {
+	private onWsMessage(data: string | ArrayBuffer) {
+		// Binary frames are the live-peek 'L' packet.
+		if (typeof data !== 'string') {
+			const frame = parseLiveBinary(data);
+			if (frame) this.liveFrame = frame;
+			return;
+		}
+		// Legacy JSON live frames (some builds / HTTP /json/live).
+		if (isLiveFrameText(data)) {
 			const frame = parseLiveFrame(data);
 			if (frame) this.liveFrame = frame;
 			return;

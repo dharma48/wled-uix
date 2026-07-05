@@ -17,7 +17,9 @@
 import { WebSocket } from 'ws';
 import { getDevice } from './deviceStore';
 import { mockLiveFrame, mockStateSnapshot } from './mockDevice';
-import { isLiveFrame } from '../wled/live';
+import { isLiveFrameText } from '../wled/live';
+
+const LIVE_MAGIC = 0x4c; // 'L' — first byte of WLED's binary peek packet
 
 type Client = WebSocket;
 
@@ -41,8 +43,11 @@ export function parseDeviceWsPath(pathname: string): string | null {
 }
 
 function send(client: Client, data: unknown) {
-	if (client.readyState === WebSocket.OPEN) {
-		client.send(typeof data === 'string' ? data : JSON.stringify(data));
+	if (client.readyState !== WebSocket.OPEN) return;
+	if (typeof data === 'string' || Buffer.isBuffer(data) || ArrayBuffer.isView(data)) {
+		client.send(data as string | Buffer);
+	} else {
+		client.send(JSON.stringify(data));
 	}
 }
 
@@ -181,10 +186,17 @@ function ensureUpstream(deviceId: string, host: string, up: Upstream) {
 		up.peeking = false;
 		if (up.liveClients.size > 0) syncPeek(up);
 	});
-	socket.on('message', (raw) => {
+	socket.on('message', (raw, isBinary) => {
+		if (isBinary) {
+			// Binary 'L' packet = live peek: forward verbatim (bytes intact) to peekers.
+			const buf = raw as Buffer;
+			const targets = buf.length > 0 && buf[0] === LIVE_MAGIC ? up.liveClients : up.clients;
+			for (const client of targets) send(client, buf);
+			return;
+		}
+		// Text: state pushes to everyone; legacy JSON live frames only to peekers.
 		const text = raw.toString();
-		// Live frames only to peekers; everything else (state) to all clients.
-		const targets = isLiveFrame(text) ? up.liveClients : up.clients;
+		const targets = isLiveFrameText(text) ? up.liveClients : up.clients;
 		for (const client of targets) send(client, text);
 	});
 	const scheduleReconnect = () => {

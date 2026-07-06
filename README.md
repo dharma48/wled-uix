@@ -38,7 +38,14 @@ Add a real device from the selector in the top bar (by IP, or pick a discovered 
 ### Docker (recommended)
 
 ```bash
-docker compose up -d --build
+docker compose up -d
+```
+
+This pulls the published image (`ghcr.io/dharma48/wled-uix:latest`) and starts it. To
+upgrade later:
+
+```bash
+docker compose pull && docker compose up -d
 ```
 
 Then open `http://<host>:3000`. Device registry persists in `./data`. Host networking is

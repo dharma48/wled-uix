@@ -1,7 +1,9 @@
 services:
   wled-uix:
-    build: .
-    image: wled-uix
+    image: ghcr.io/dharma48/wled-uix:latest
+    # To build from source instead of pulling the published image, comment out the
+    # `image:` line above and uncomment the line below:
+    # build: .
     container_name: wled-uix
     restart: unless-stopped
     # Host networking lets the app do mDNS (_wled._tcp) discovery on your LAN.

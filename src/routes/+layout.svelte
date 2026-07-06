@@ -4,10 +4,12 @@
 	import { page } from '$app/state';
 	import { devices } from '$lib/stores/devices.svelte';
 	import { activeController } from '$lib/stores/activeController.svelte';
+	import { wledUiUrl } from '$lib/wled/deviceUrl';
 	import DeviceSwitcher from '$lib/components/DeviceSwitcher.svelte';
 
 	let { children } = $props();
 	let theme = $state<'dark' | 'light'>('dark');
+	let nativeUrl = $derived(wledUiUrl(devices.active?.host));
 
 	onMount(() => {
 		devices.load();
@@ -39,6 +41,35 @@
 		</div>
 		<div class="topbar-right">
 			<DeviceSwitcher />
+			{#if nativeUrl}
+				<a
+					class="icon-btn"
+					href={nativeUrl}
+					target="_blank"
+					rel="noopener noreferrer"
+					title="Open native WLED UI for {devices.active?.name}"
+					aria-label="Open native WLED UI"
+				>
+					<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+						<path
+							d="M14 4h6v6M20 4l-8 8"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+						<path
+							d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+				</a>
+			{/if}
 			<button
 				class="theme-btn"
 				title="Toggle theme"
@@ -117,13 +148,27 @@
 		align-items: center;
 		gap: 10px;
 	}
-	.theme-btn {
+	.theme-btn,
+	.icon-btn {
 		width: 38px;
 		height: 38px;
 		border-radius: 50%;
 		border: 1px solid var(--border);
 		background: var(--bg-elev);
 		font-size: 1rem;
+	}
+	.icon-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--text-dim);
+		transition:
+			color 0.15s var(--ease),
+			border-color 0.15s var(--ease);
+	}
+	.icon-btn:hover {
+		color: var(--accent);
+		border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
 	}
 	.tabs-nav {
 		display: flex;

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { devices } from '$lib/stores/devices.svelte';
+	import { wledUiUrl } from '$lib/wled/deviceUrl';
 
 	let open = $state(false);
 	let adding = $state(false);
@@ -45,6 +46,35 @@
 							<span class="dev-name">{d.name}</span>
 							<span class="faint dev-host">{d.host}</span>
 						</button>
+						{#if wledUiUrl(d.host)}
+							<a
+								class="dev-open"
+								href={wledUiUrl(d.host)}
+								target="_blank"
+								rel="noopener noreferrer"
+								title="Open native WLED UI"
+								aria-label="Open native WLED UI for {d.name}"
+							>
+								<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+									<path
+										d="M14 4h6v6M20 4l-8 8"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+									<path
+										d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+							</a>
+						{/if}
 						{#if devices.list.length > 1}
 							<button class="dev-del" title="Remove" onclick={() => devices.remove(d.id)}>✕</button>
 						{/if}
@@ -158,6 +188,15 @@
 	}
 	.dev-host {
 		font-size: 0.76rem;
+	}
+	.dev-open {
+		display: inline-flex;
+		align-items: center;
+		padding: 8px 8px;
+		color: var(--text-faint);
+	}
+	.dev-open:hover {
+		color: var(--accent);
 	}
 	.dev-del {
 		padding: 8px 10px;

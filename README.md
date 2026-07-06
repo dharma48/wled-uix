@@ -8,9 +8,9 @@ origin can't talk to them directly. WLED UIX solves this by running a tiny self-
 Node server that serves the UI **and** proxies requests (and the live WebSocket state
 stream) to your devices. Everything stays on your LAN.
 
-> **Milestone 1 (this release):** device discovery + connection, power, master
-> brightness, per-segment color / effect / palette editing with live state, and applying
-> existing presets. A dedicated **scene designer** is the next milestone.
+## Vibe Alert!
+
+This application is fully vibe coded. I'm an experienced engineer, but frontend is not within my wheelhouse. I built this entirely for myself. The repo is public in case others find it useful, but I'm not advertising this as a project that's free from bugs, fully functional, or recommended for anyone.
 
 ## Features
 

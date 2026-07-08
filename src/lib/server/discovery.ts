@@ -3,6 +3,9 @@
  * Used to populate the "add device" flow; manual IP entry is always available too.
  */
 import { Bonjour } from 'bonjour-service';
+import { createLogger } from '../../../logger.js';
+
+const log = createLogger('discovery');
 
 export interface DiscoveredDevice {
 	name: string;
@@ -17,7 +20,8 @@ export function discoverWled(timeoutMs = 3000): Promise<DiscoveredDevice[]> {
 		let bonjour: Bonjour | null = null;
 		try {
 			bonjour = new Bonjour();
-		} catch {
+		} catch (err) {
+			log.warn(`mDNS init failed: ${(err as Error).message}`);
 			resolve([]);
 			return;
 		}
@@ -37,6 +41,7 @@ export function discoverWled(timeoutMs = 3000): Promise<DiscoveredDevice[]> {
 			} catch {
 				/* ignore */
 			}
+			log.debug(`mDNS discovery finished: ${found.size} device(s)`);
 			resolve([...found.values()]);
 		}, timeoutMs);
 	});

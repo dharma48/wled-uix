@@ -15,6 +15,9 @@
 import { getDevice } from './deviceStore';
 import { mockJson, mockPresets } from './mockDevice';
 import { createSerialQueue } from './serialQueue';
+import { createLogger } from '../../../logger.js';
+
+const log = createLogger('proxy');
 
 const REQUEST_TIMEOUT_MS = 4000;
 const GET_RETRIES = 3; // total attempts for a GET before giving up
@@ -77,6 +80,7 @@ function fetchDevice(
 			try {
 				up = await upstreamOnce(url, method, body);
 			} catch (err) {
+				log.warn(`device unreachable host=${host} ${method} ${url}: ${(err as Error).message}`);
 				return json({ error: 'device unreachable', detail: (err as Error).message, host }, 502);
 			}
 			// Don't try to parse error bodies or POST acks — pass them straight through.
@@ -86,9 +90,15 @@ function fetchDevice(
 				return passthrough(up.text, up.status);
 			} catch {
 				truncatedBytes = up.text.length; // device truncated the response — retry
+				log.debug(
+					`malformed JSON from host=${host} ${url} (${truncatedBytes} bytes), retry ${attempt + 1}/${attempts}`
+				);
 				if (attempt < attempts - 1) await delay(RETRY_DELAY_MS);
 			}
 		}
+		log.warn(
+			`device returned malformed JSON host=${host} ${url} after ${attempts} attempts (${truncatedBytes} bytes)`
+		);
 		return json(
 			{ error: 'device returned malformed JSON', bytes: truncatedBytes, host, attempts },
 			502

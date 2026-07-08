@@ -6,6 +6,9 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Scene, SceneCreate } from '$lib/scenes/types';
+import { createLogger } from '../../../logger.js';
+
+const log = createLogger('sceneStore');
 
 const DATA_DIR = process.env.DATA_DIR ?? join(process.cwd(), 'data');
 const FILE = join(DATA_DIR, 'scenes.json');
@@ -22,7 +25,8 @@ function load(): StoreShape {
 		try {
 			const parsed = JSON.parse(readFileSync(FILE, 'utf8')) as StoreShape;
 			gstore.__wledSceneStore = Array.isArray(parsed.scenes) ? parsed : { scenes: [] };
-		} catch {
+		} catch (err) {
+			log.warn(`failed to parse ${FILE}, starting empty: ${(err as Error).message}`);
 			gstore.__wledSceneStore = { scenes: [] };
 		}
 	} else {

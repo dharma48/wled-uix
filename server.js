@@ -11,6 +11,9 @@
 import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { handler } from './build/handler.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('server');
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? '0.0.0.0';
@@ -23,6 +26,7 @@ server.on('upgrade', (req, socket, head) => {
 	const pathname = new URL(req.url ?? '', 'http://localhost').pathname;
 	const id = bridge?.parseDeviceWsPath?.(pathname);
 	if (!bridge || !id) {
+		log.debug(`rejected WS upgrade for ${pathname}`);
 		socket.destroy();
 		return;
 	}
@@ -30,5 +34,5 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 server.listen(port, host, () => {
-	console.log(`WLED UIX listening on http://${host}:${port}`);
+	log.info(`WLED UIX listening on http://${host}:${port}`);
 });

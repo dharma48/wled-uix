@@ -18,6 +18,9 @@ import { WebSocket } from 'ws';
 import { getDevice } from './deviceStore';
 import { mockLiveFrame, mockStateSnapshot } from './mockDevice';
 import { isLiveFrameText } from '../wled/live';
+import { createLogger } from '../../../logger.js';
+
+const log = createLogger('wsProxy');
 
 const LIVE_MAGIC = 0x4c; // 'L' — first byte of WLED's binary peek packet
 
@@ -65,6 +68,7 @@ function lvIntent(text: string): boolean | null {
 export function handleDeviceSocket(deviceId: string, client: Client): void {
 	const device = getDevice(deviceId);
 	if (!device) {
+		log.debug(`WS for unknown device ${deviceId}, closing`);
 		send(client, { error: 'unknown device' });
 		client.close();
 		return;
@@ -164,6 +168,7 @@ function syncPeek(up: Upstream) {
 	const shouldPeek = up.liveClients.size > 0;
 	if (shouldPeek === up.peeking) return;
 	up.peeking = shouldPeek;
+	log.debug(`peek ${shouldPeek ? 'start' : 'stop'} (${up.liveClients.size} live clients)`);
 	if (up.socket?.readyState === WebSocket.OPEN) {
 		up.socket.send(JSON.stringify({ lv: shouldPeek }));
 	}
@@ -176,10 +181,12 @@ function ensureUpstream(deviceId: string, host: string, up: Upstream) {
 	)
 		return;
 
+	log.info(`connecting upstream WS to device ${deviceId} (ws://${host}/ws)`);
 	const socket = new WebSocket(`ws://${host}/ws`);
 	up.socket = socket;
 
 	socket.on('open', () => {
+		log.debug(`upstream WS open for device ${deviceId}`);
 		// Ask WLED to push full state now and on change; re-arm peek if a client wants it
 		// (a fresh connection resets the device's peek state).
 		socket.send(JSON.stringify({ v: true }));
@@ -204,13 +211,15 @@ function ensureUpstream(deviceId: string, host: string, up: Upstream) {
 		up.peeking = false;
 		if (up.closing || up.clients.size === 0) return;
 		if (up.reconnectTimer) return;
+		log.info(`upstream WS closed for device ${deviceId}, reconnecting in 2s`);
 		up.reconnectTimer = setTimeout(() => {
 			up.reconnectTimer = null;
 			ensureUpstream(deviceId, host, up);
 		}, 2000);
 	};
 	socket.on('close', scheduleReconnect);
-	socket.on('error', () => {
+	socket.on('error', (err) => {
+		log.warn(`upstream WS error for device ${deviceId} (${host}): ${err.message}`);
 		for (const client of up.clients) send(client, { error: 'device unreachable' });
 		try {
 			socket.close();

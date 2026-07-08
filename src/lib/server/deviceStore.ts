@@ -9,6 +9,9 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { removeScenesForDevice } from './sceneStore';
+import { createLogger } from '../../../logger.js';
+
+const log = createLogger('deviceStore');
 
 export interface Device {
 	id: string;
@@ -39,7 +42,8 @@ function load(): StoreShape {
 		try {
 			const parsed = JSON.parse(readFileSync(FILE, 'utf8')) as StoreShape;
 			gstore.__wledDeviceStore = Array.isArray(parsed.devices) ? parsed : { devices: [] };
-		} catch {
+		} catch (err) {
+			log.warn(`failed to parse ${FILE}, starting empty: ${(err as Error).message}`);
 			gstore.__wledDeviceStore = { devices: [] };
 		}
 	} else {
@@ -77,6 +81,7 @@ export function addDevice(input: { name: string; host: string }): Device {
 	};
 	store.devices.push(device);
 	persist();
+	log.info(`added device ${device.name} (${device.host}) id=${device.id}`);
 	return device;
 }
 
@@ -99,5 +104,6 @@ export function removeDevice(id: string): boolean {
 	store.devices.splice(idx, 1);
 	persist();
 	removeScenesForDevice(id); // cascade: drop the device's saved scenes
+	log.info(`removed device id=${id}`);
 	return true;
 }

@@ -13,6 +13,8 @@ services:
     environment:
       - PORT=3000
       - DATA_DIR=/data
+      # Log verbosity: error | warn | info | debug (default: info)
+      # - LOG_LEVEL=info
     volumes:
       - ./data:/data
     # ports:

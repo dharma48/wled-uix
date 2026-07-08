@@ -60,6 +60,15 @@ npm run build
 node server.js          # serves on :3000 (PORT / HOST / DATA_DIR env vars)
 ```
 
+### Configuration
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | HTTP listen port |
+| `HOST` | `0.0.0.0` | HTTP listen address |
+| `DATA_DIR` | `./data` | Where the device/scene registry JSON is persisted |
+| `LOG_LEVEL` | `info` | Log verbosity: `error`, `warn`, `info`, or `debug`. Unknown values fall back to `info`. |
+
 ## Tests
 
 ```bash

@@ -50,9 +50,19 @@ function toGradient(stops: string[]): string {
 const rgb = (c: WledColor | undefined, fb = '#333') =>
 	c ? `rgb(${c[0]}, ${c[1]}, ${c[2]})` : fb;
 
+const isBlack = (c: WledColor | undefined) => !c || (c[0] === 0 && c[1] === 0 && c[2] === 0);
+
+/** A gradient built from the segment's own (non-black) colors; primary if it's the only one. */
+function colorsGradient(segColors?: WledColor[]): string {
+	const cols = (segColors ?? []).slice(0, 3).filter((c) => !isBlack(c));
+	if (cols.length === 0) return rgb(segColors?.[0], '#888');
+	if (cols.length === 1) return rgb(cols[0]);
+	return `linear-gradient(90deg, ${cols.map((c) => rgb(c)).join(', ')})`;
+}
+
 /**
  * Return a CSS `background` value previewing a palette by name.
- * `segColors` supplies the live primary/secondary/tertiary for the "special" palettes.
+ * `segColors` supplies the live primary/secondary/tertiary for the color-driven palettes.
  */
 export function paletteGradient(name: string, segColors?: WledColor[]): string {
 	const primary = rgb(segColors?.[0], '#888');
@@ -60,8 +70,10 @@ export function paletteGradient(name: string, segColors?: WledColor[]): string {
 	const tertiary = rgb(segColors?.[2], '#000');
 
 	switch (name) {
+		// Palette 0 "Default" uses the segment's own colors for the common (solid/single-color)
+		// case, so a specific-color scene previews as that color rather than a generic rainbow.
 		case 'Default':
-			return toGradient(FALLBACK);
+			return colorsGradient(segColors);
 		case '* Random Cycle':
 			return toGradient(['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff']);
 		case '* Color 1':

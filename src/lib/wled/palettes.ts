@@ -50,25 +50,19 @@ function toGradient(stops: string[]): string {
 const rgb = (c: WledColor | undefined, fb = '#333') =>
 	c ? `rgb(${c[0]}, ${c[1]}, ${c[2]})` : fb;
 
-const isLit = (c: WledColor | undefined): c is WledColor => !!c && (c[0] > 0 || c[1] > 0 || c[2] > 0);
+const isBlack = (c: WledColor | undefined) => !c || (c[0] === 0 && c[1] === 0 && c[2] === 0);
 
-/**
- * Preview the WLED "Default" palette from the segment's own colors. Palette id 0 tells WLED
- * to color the effect from the segment's slots rather than a gradient palette, so a generic
- * rainbow misrepresents it — and since most real-world scenes leave the palette at Default,
- * that made nearly every thumbnail a rainbow. Render the lit color slots instead, falling
- * back to the rainbow only when the segment carries no color data.
- */
-function defaultPalette(segColors?: WledColor[]): string {
-	const lit = (segColors ?? []).filter(isLit);
-	if (lit.length === 0) return toGradient(FALLBACK);
-	if (lit.length === 1) return rgb(lit[0]);
-	return `linear-gradient(90deg, ${lit.map((c) => rgb(c)).join(', ')})`;
+/** A gradient built from the segment's own (non-black) colors; primary if it's the only one. */
+function colorsGradient(segColors?: WledColor[]): string {
+	const cols = (segColors ?? []).slice(0, 3).filter((c) => !isBlack(c));
+	if (cols.length === 0) return rgb(segColors?.[0], '#888');
+	if (cols.length === 1) return rgb(cols[0]);
+	return `linear-gradient(90deg, ${cols.map((c) => rgb(c)).join(', ')})`;
 }
 
 /**
  * Return a CSS `background` value previewing a palette by name.
- * `segColors` supplies the live primary/secondary/tertiary for the "special" palettes.
+ * `segColors` supplies the live primary/secondary/tertiary for the color-driven palettes.
  */
 export function paletteGradient(name: string, segColors?: WledColor[]): string {
 	const primary = rgb(segColors?.[0], '#888');
@@ -76,8 +70,10 @@ export function paletteGradient(name: string, segColors?: WledColor[]): string {
 	const tertiary = rgb(segColors?.[2], '#000');
 
 	switch (name) {
+		// Palette 0 "Default" uses the segment's own colors for the common (solid/single-color)
+		// case, so a specific-color scene previews as that color rather than a generic rainbow.
 		case 'Default':
-			return defaultPalette(segColors);
+			return colorsGradient(segColors);
 		case '* Random Cycle':
 			return toGradient(['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff']);
 		case '* Color 1':

@@ -36,9 +36,9 @@ describe('paletteGradient', () => {
 			);
 		});
 
-		it('falls back to a rainbow only when the segment has no color data', () => {
-			expect(paletteGradient('Default')).toContain(RAINBOW);
-			expect(paletteGradient('Default', [[0, 0, 0]])).toContain(RAINBOW);
+		it('falls back to the primary color (or gray) when no slot is lit', () => {
+			expect(paletteGradient('Default')).toBe('#888');
+			expect(paletteGradient('Default', [[0, 0, 0]])).toBe('rgb(0, 0, 0)');
 		});
 	});
 });

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { DeviceController } from '$lib/stores/device.svelte';
+	import { favorites } from '$lib/stores/favorites.svelte';
 	import { paletteGradient } from '$lib/wled/palettes';
 	import type { WledColor } from '$lib/wled/types';
 
@@ -14,6 +15,12 @@
 		palettes
 			.map((name, id) => ({ name, id }))
 			.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()))
+			// Pin favorites to the top; stable sort preserves order within each group.
+			.sort(
+				(a, b) =>
+					Number(favorites.isFavorite('palette', b.name)) -
+					Number(favorites.isFavorite('palette', a.name))
+			)
 	);
 </script>
 
@@ -22,15 +29,28 @@
 		<input class="search" placeholder="Search palettes…" bind:value={query} />
 		<div class="grid">
 			{#each filtered as p (p.id)}
-				<button
-					class="pal"
-					class:active={seg.pal === p.id}
-					onclick={() => ctrl.setSegPalette(p.id)}
-					title={p.name}
-				>
-					<span class="bar" style:background={paletteGradient(p.name, segColors)}></span>
-					<span class="name">{p.name}</span>
-				</button>
+				{@const fav = favorites.isFavorite('palette', p.name)}
+				<div class="pal-item">
+					<button
+						class="pal"
+						class:active={seg.pal === p.id}
+						onclick={() => ctrl.setSegPalette(p.id)}
+						title={p.name}
+					>
+						<span class="bar" style:background={paletteGradient(p.name, segColors)}></span>
+						<span class="name">{p.name}</span>
+					</button>
+					<button
+						class="star"
+						class:on={fav}
+						aria-label={fav ? `Unfavorite ${p.name}` : `Favorite ${p.name}`}
+						aria-pressed={fav}
+						title={fav ? 'Unfavorite' : 'Favorite'}
+						onclick={() => favorites.toggle('palette', p.name)}
+					>
+						{fav ? '★' : '☆'}
+					</button>
+				</div>
 			{/each}
 		</div>
 	</div>
@@ -62,8 +82,13 @@
 		overflow-y: auto;
 		padding-right: 4px;
 	}
+	.pal-item {
+		position: relative;
+	}
 	.pal {
 		display: flex;
+		width: 100%;
+		box-sizing: border-box;
 		flex-direction: column;
 		gap: 6px;
 		padding: 6px;
@@ -75,6 +100,36 @@
 	.pal.active {
 		border-color: var(--accent);
 		box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+	}
+	.star {
+		position: absolute;
+		top: 10px;
+		right: 10px;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		height: 22px;
+		padding: 0;
+		border: none;
+		border-radius: 50%;
+		background: color-mix(in srgb, var(--bg) 55%, transparent);
+		color: #fff;
+		font-size: 0.9rem;
+		line-height: 1;
+		opacity: 0.75;
+		cursor: pointer;
+		transition:
+			color 0.14s var(--ease),
+			opacity 0.14s var(--ease);
+	}
+	.star:hover {
+		opacity: 1;
+	}
+	.star.on {
+		opacity: 1;
+		color: #ffd43b;
 	}
 	.bar {
 		height: 26px;

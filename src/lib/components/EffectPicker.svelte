@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { DeviceController } from '$lib/stores/device.svelte';
+	import { favorites } from '$lib/stores/favorites.svelte';
 
 	let { ctrl }: { ctrl: DeviceController } = $props();
 
@@ -13,6 +14,12 @@
 			// Hide WLED's reserved/removed effect slots (named "RSVD").
 			.filter((e) => e.name !== 'RSVD')
 			.filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
+			// Pin favorites to the top; stable sort preserves order within each group.
+			.sort(
+				(a, b) =>
+					Number(favorites.isFavorite('effect', b.name)) -
+					Number(favorites.isFavorite('effect', a.name))
+			)
 	);
 </script>
 
@@ -28,29 +35,42 @@
 			{#each filtered as e (e.id)}
 				{@const colorCount = e.meta?.colors.length ?? 0}
 				{@const usesPalette = e.meta?.usesPalette ?? false}
-				<button class="fx" class:active={seg.fx === e.id} onclick={() => ctrl.setSegEffect(e.id)}>
-					<span class="fx-head">
-						<span class="fx-name">{e.name}</span>
-						<span class="tags">
-							{#if e.meta?.is2D}<span class="tag" title="2D matrix">2D</span>{/if}
-							{#if e.meta?.volumeReactive}<span class="tag" title="Volume reactive">♪</span>{/if}
-							{#if e.meta?.frequencyReactive}<span class="tag" title="Frequency reactive">≈</span>{/if}
-						</span>
-					</span>
-					<span class="fx-meta">
-						{#if colorCount > 0}
-							<span class="m-colors" title={`Uses ${colorCount} color${colorCount > 1 ? 's' : ''}`}>
-								{#each Array(colorCount) as _, i (i)}<i class="cdot"></i>{/each}
+				{@const fav = favorites.isFavorite('effect', e.name)}
+				<div class="fx-item">
+					<button class="fx" class:active={seg.fx === e.id} onclick={() => ctrl.setSegEffect(e.id)}>
+						<span class="fx-head">
+							<span class="fx-name">{e.name}</span>
+							<span class="tags">
+								{#if e.meta?.is2D}<span class="tag" title="2D matrix">2D</span>{/if}
+								{#if e.meta?.volumeReactive}<span class="tag" title="Volume reactive">♪</span>{/if}
+								{#if e.meta?.frequencyReactive}<span class="tag" title="Frequency reactive">≈</span>{/if}
 							</span>
-						{/if}
-						{#if usesPalette}
-							<span class="pal-chip" title="Uses a palette"></span>
-						{/if}
-						{#if colorCount === 0 && !usesPalette}
-							<span class="m-none" title="No color or palette options">no color options</span>
-						{/if}
-					</span>
-				</button>
+						</span>
+						<span class="fx-meta">
+							{#if colorCount > 0}
+								<span class="m-colors" title={`Uses ${colorCount} color${colorCount > 1 ? 's' : ''}`}>
+									{#each Array(colorCount) as _, i (i)}<i class="cdot"></i>{/each}
+								</span>
+							{/if}
+							{#if usesPalette}
+								<span class="pal-chip" title="Uses a palette"></span>
+							{/if}
+							{#if colorCount === 0 && !usesPalette}
+								<span class="m-none" title="No color or palette options">no color options</span>
+							{/if}
+						</span>
+					</button>
+					<button
+						class="star"
+						class:on={fav}
+						aria-label={fav ? `Unfavorite ${e.name}` : `Favorite ${e.name}`}
+						aria-pressed={fav}
+						title={fav ? 'Unfavorite' : 'Favorite'}
+						onclick={() => favorites.toggle('effect', e.name)}
+					>
+						{fav ? '★' : '☆'}
+					</button>
+				</div>
 			{/each}
 		</div>
 	</div>
@@ -92,8 +112,13 @@
 		overflow-y: auto;
 		padding-right: 4px;
 	}
+	.fx-item {
+		position: relative;
+	}
 	.fx {
 		display: flex;
+		width: 100%;
+		box-sizing: border-box;
 		flex-direction: column;
 		gap: 6px;
 		padding: 9px 11px;
@@ -110,11 +135,49 @@
 		background: var(--accent);
 		border-color: transparent;
 	}
+	.star {
+		position: absolute;
+		top: 5px;
+		right: 6px;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		height: 22px;
+		padding: 0;
+		border: none;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text-dim);
+		font-size: 0.95rem;
+		line-height: 1;
+		opacity: 0.5;
+		cursor: pointer;
+		transition:
+			color 0.14s var(--ease),
+			opacity 0.14s var(--ease);
+	}
+	.star:hover,
+	.star.on {
+		opacity: 1;
+		color: var(--accent);
+	}
+	.fx-item:has(.fx.active) .star {
+		color: var(--accent-contrast);
+		opacity: 0.7;
+	}
+	.fx-item:has(.fx.active) .star:hover,
+	.fx-item:has(.fx.active) .star.on {
+		color: var(--accent-contrast);
+		opacity: 1;
+	}
 	.fx-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
+		padding-right: 20px;
 	}
 	.fx-name {
 		white-space: nowrap;

@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { devices } from '$lib/stores/devices.svelte';
+	import { favorites } from '$lib/stores/favorites.svelte';
 	import { activeController } from '$lib/stores/activeController.svelte';
 	import { wledUiUrl } from '$lib/wled/deviceUrl';
 	import DeviceSwitcher from '$lib/components/DeviceSwitcher.svelte';
@@ -13,6 +14,7 @@
 
 	onMount(() => {
 		devices.load();
+		favorites.load();
 		const saved = localStorage.getItem('theme') as 'dark' | 'light' | null;
 		if (saved) applyTheme(saved);
 	});

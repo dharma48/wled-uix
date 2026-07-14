@@ -2,11 +2,13 @@
 	import type { DeviceController } from '$lib/stores/device.svelte';
 	import type { CheckboxKey, SliderKey } from '$lib/wled/fxdata';
 	import Slider from './Slider.svelte';
+	import EffectInfoCard from './EffectInfoCard.svelte';
 
 	let { ctrl }: { ctrl: DeviceController } = $props();
 
 	let seg = $derived(ctrl.selectedSegment);
 	let meta = $derived(seg ? ctrl.metaFor(seg.fx) : undefined);
+	let effectName = $derived(seg ? (ctrl.bundle?.effects?.[seg.fx] ?? '') : '');
 
 	function sliderValue(key: SliderKey): number {
 		return (seg?.[key] as number | undefined) ?? 128;
@@ -18,6 +20,8 @@
 
 {#if seg && meta}
 	<div class="controls">
+		<EffectInfoCard name={effectName} {meta} showControls={false} />
+
 		{#if meta.sliders.length}
 			<div class="sliders">
 				{#each meta.sliders as s (s.key)}

@@ -104,6 +104,12 @@ Key modules:
 - Playlists as animated scenes; scheduling / holiday automation.
 - Live LED "Peek" strip & 2D matrix preview.
 
+## Credits
+
+Effect descriptions in the effect picker are vendored from
+[scottrbailey/WLED-Utils](https://github.com/scottrbailey/WLED-Utils)
+(`effect_descriptions.json`, MIT © Artacus).
+
 ## License
 
 MIT

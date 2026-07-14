@@ -1,12 +1,54 @@
 <script lang="ts">
 	import type { DeviceController } from '$lib/stores/device.svelte';
 	import { favorites } from '$lib/stores/favorites.svelte';
+	import type { EffectMeta } from '$lib/wled/fxdata';
+	import EffectInfoCard from './EffectInfoCard.svelte';
 
 	let { ctrl }: { ctrl: DeviceController } = $props();
 
 	let seg = $derived(ctrl.selectedSegment);
 	let effects = $derived(ctrl.bundle?.effects ?? []);
 	let query = $state('');
+
+	// Info card shown on hover/focus of a tile. Positioned at picker level (fixed) so it
+	// isn't clipped by the grid's own scroll container.
+	let hovered = $state<{ name: string; meta: EffectMeta | undefined; rect: DOMRect } | null>(null);
+	let popEl = $state<HTMLDivElement | null>(null);
+	let pos = $state<{ left: number; top: number } | null>(null);
+	let showTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function showInfo(name: string, meta: EffectMeta | undefined, target: HTMLElement, delay = 120) {
+		if (showTimer) clearTimeout(showTimer);
+		showTimer = setTimeout(() => {
+			hovered = { name, meta, rect: target.getBoundingClientRect() };
+		}, delay);
+	}
+	function hideInfo() {
+		if (showTimer) {
+			clearTimeout(showTimer);
+			showTimer = null;
+		}
+		hovered = null;
+		pos = null;
+	}
+
+	// Once the card has rendered we can measure it and place it beside the tile, flipping
+	// to the other side / clamping so it always stays on screen.
+	$effect(() => {
+		if (!hovered || !popEl) return;
+		const gap = 8;
+		const cardW = popEl.offsetWidth;
+		const cardH = popEl.offsetHeight;
+		const vw = window.innerWidth;
+		const vh = window.innerHeight;
+		const r = hovered.rect;
+		let left = r.right + gap;
+		if (left + cardW > vw - 8) left = r.left - gap - cardW; // flip to the left
+		left = Math.min(Math.max(8, left), vw - cardW - 8);
+		let top = Math.min(r.top, vh - cardH - 8);
+		top = Math.max(8, top);
+		pos = { left, top };
+	});
 
 	let filtered = $derived(
 		effects
@@ -37,7 +79,16 @@
 				{@const usesPalette = e.meta?.usesPalette ?? false}
 				{@const fav = favorites.isFavorite('effect', e.name)}
 				<div class="fx-item">
-					<button class="fx" class:active={seg.fx === e.id} onclick={() => ctrl.setSegEffect(e.id)}>
+					<button
+						class="fx"
+						class:active={seg.fx === e.id}
+						onclick={() => ctrl.setSegEffect(e.id)}
+						onmouseenter={(ev) => showInfo(e.name, e.meta, ev.currentTarget)}
+						onmouseleave={hideInfo}
+						onfocus={(ev) => showInfo(e.name, e.meta, ev.currentTarget, 0)}
+						onblur={hideInfo}
+						aria-describedby={hovered?.name === e.name ? 'fx-info-card' : undefined}
+					>
 						<span class="fx-head">
 							<span class="fx-name">{e.name}</span>
 							<span class="tags">
@@ -73,6 +124,20 @@
 				</div>
 			{/each}
 		</div>
+
+		{#if hovered}
+			<div
+				id="fx-info-card"
+				class="fx-popover"
+				role="tooltip"
+				bind:this={popEl}
+				style:left="{pos?.left ?? 0}px"
+				style:top="{pos?.top ?? 0}px"
+				style:visibility={pos ? 'visible' : 'hidden'}
+			>
+				<EffectInfoCard name={hovered.name} meta={hovered.meta} />
+			</div>
+		{/if}
 	</div>
 {/if}
 
@@ -81,6 +146,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
+	}
+	.fx-popover {
+		position: fixed;
+		z-index: 50;
+		width: 250px;
+		pointer-events: none;
+		filter: drop-shadow(0 6px 20px rgba(0, 0, 0, 0.35));
 	}
 	.search {
 		width: 100%;
